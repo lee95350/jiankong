@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全链流水监控 - 安全加密版</title>
+    <style>
+        :root { --btc: #f7931a; --eth: #627eea; --base: #0052ff; --green: #27ae60; --red: #e74c3c; --gray: #64748b; --usdt: #26a17b; --dark: #1a1a1a; --pending: #3498db; --token: #9c27b0; --pyusd: #003087; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f7f6; padding: 10px; margin: 0; }
+        #authOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .auth-card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 300px; }
+        .auth-card input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; text-align: center; }
+        .container { max-width: 850px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: none; }
+        .header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; }
+        #timer { font-weight: bold; color: var(--base); font-size: 12px; background: #eef2ff; padding: 3px 12px; border-radius: 12px; }
+        textarea { width: 100%; height: 85px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; box-sizing: border-box; outline: none; margin-bottom: 15px; background: #fcfcfc; line-height: 1.5; resize: none; }
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        button { border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px; transition: opacity 0.2s; }
+        button:active { opacity: 0.8; }
+        .btn-main { flex: 2; background: var(--dark); color: white; }
+        .btn-stop { flex: 1; background: var(--red); color: white; }
+        .btn-clear { flex: 1; background: #94a3b8; color: white; }
+        .list-header, .list-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+        .list-header { background: #f8fafc; color: var(--gray); font-size: 12px; font-weight: bold; border-radius: 6px; }
+        .w-time { width: 55px; text-align: center; font-size: 11px; flex-shrink: 0; font-weight: bold; }
+        .w-alias { flex: 1.2; text-align: center; }
+        .w-asset { flex: 1; text-align: center; }
+        .w-val { flex: 1.8; text-align: center; } 
+        .w-dir { flex: 1.8; text-align: center; }
+        .w-tx { width: 40px; text-align: center; flex-shrink: 0; }
+        .date-divider { display: flex; align-items: center; justify-content: center; margin: 15px 0 5px; color: #94a3b8; font-size: 11px; font-weight: bold; }
+        .date-divider::before, .date-divider::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; margin: 0 15px; }
+        .alias-tag { color: #fff; padding: 2px 10px; border-radius: 4px; font-weight: 800; font-size: 12px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .addr-sub { color: #94a3b8; font-family: monospace; font-size: 10px; display: block; margin-top: 2px; }
+        .val-usd { font-weight: 800; font-size: 16px; display: block; letter-spacing: -0.5px; }
+        .val-coin { font-size: 11px; display: block; font-family: 'Roboto Mono', monospace; font-weight: bold; }
+        .color-in { color: var(--green); }
+        .color-out { color: var(--red); }
+        .color-btc { color: var(--btc); }
+        .color-eth { color: var(--eth); }
+        .color-usdt { color: var(--usdt); }
+        .status-tag { padding: 3px 10px; border-radius: 6px; font-weight: bold; font-size: 11px; display: inline-block; }
+        .status-in { color: var(--green); background: #e8f5e9; }
+        .status-out { color: var(--red); background: #ffebee; }
+        .status-pending { color: var(--pending); background: #e3f2fd; }
+        .sender-info { font-size: 10px; color: #94a3b8; display: block; margin-top: 4px; font-family: monospace; }
+        .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; margin-top: 4px; }
+        .bg-btc { background: var(--btc); }
+        .bg-eth { background: var(--eth); }
+        .bg-base { background: var(--base); }
+        .bg-usdt { background: var(--usdt); }
+        a { text-decoration: none; color: #6366f1; font-weight: bold; font-size: 15px; }
+    </style>
+</head>
+<body>
+
+<div id="authOverlay">
+    <div class="auth-card">
+        <h3>身份验证</h3>
+        <input type="password" id="pwdInput" placeholder="输入访问密码">
+        <button class="btn-main" style="width:100%" id="enterBtn">进入系统</button>
+        <p id="errMsg" style="color:red; font-size:12px; margin-top:10px; display:none;">密码错误，请重试</p>
+    </div>
+</div>
+
+<div class="container" id="mainApp">
+    <div class="header"><h2 style="margin:0; font-size:18px;">全链流水监控 (安全版)</h2><div id="timer">待命</div></div>
+    <textarea id="addressList" placeholder="粘贴地址后点击开始，系统将自动补齐序号。"></textarea>
+    <div class="btn-group">
+        <button class="btn-main" id="startBtn">开始轮询</button>
+        <button class="btn-stop" id="stopBtn">停止</button>
+        <button class="btn-clear" id="clearBtn">清空流水</button>
+    </div>
+    <div class="list-header">
+        <div class="w-time">时间</div><div class="w-alias">归属标记</div><div class="w-asset">资产/网络</div><div class="w-val">价值 (USD)</div><div class="w-dir">状态</div><div class="w-tx">TX</div>
+    </div>
+    <div id="listBody"></div>
+</div>
+
+<script>
+    // 混淆核心逻辑
+    (function(_0x88, _0x99) {
+        const _0x1a = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"; // 123456
+        const _0x2b = "proapi_bU1BYWVXceVO4CG3vz62DZrNvS9qcq0AQtqlH73DLU1tYuU3GD4Q9Jrb6lNWpDnJ6_ePgP16";
+        const _0x3c = ["ETH", "USDC", "USDT", "PYUSD", "BTC"];
+        const _0x4d = ["#1e293b", "#4338ca", "#047857", "#be123c", "#7e22ce", "#a21caf", "#c2410c", "#0369a1"];
+
+        let _0x_tm = null, _0x_cd = 20, _0x_sc = false, _0x_md = [];
+        let _0x_pr = { ETH: 3300, BTC: 65000 };
+
+        async function _0x_hs(_0x0) {
+            const _0x1 = new TextEncoder().encode(_0x0);
+            const _0x2 = await crypto.subtle.digest('SHA-256', _0x1);
+            return Array.from(new Uint8Array(_0x2)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function _0x_auth() {
+            const _0x_v = document.getElementById('pwdInput').value;
+            if (await _0x_hs(_0x_v) === _0x1a) {
+                sessionStorage.setItem('isAuth', 'true');
+                _0x_sh();
+            } else {
+                document.getElementById('errMsg').style.display = 'block';
+                document.getElementById('pwdInput').value = '';
+            }
+        }
+
+        function _0x_sh() {
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+        }
+
+        // 事件绑定
+        document.getElementById('enterBtn').onclick = _0x_auth;
+        document.getElementById('pwdInput').onkeydown = (e) => { if(e.keyCode===13) _0x_auth(); };
+        if(sessionStorage.getItem('isAuth') === 'true') _0x_sh();
+
+        async function _0x_upd() {
+            try {
+                const r1 = await fetch('https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD');
+                const r2 = await fetch('https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD');
+                const d1 = await r1.json(); const d2 = await r2.json();
+                if(d1.USD) _0x_pr.BTC = d1.USD; if(d2.USD) _0x_pr.ETH = d2.USD;
+            } catch(e) {}
+        }
+
+        async function _0x_scan() {
+            if (_0x_sc) return; _0x_sc = true; await _0x_upd();
+            document.getElementById('timer').innerText = "刷新链上状态...";
+            const _0x_ar = document.getElementById('addressList');
+            const _0x_ln = _0x_ar.value.split('\n');
+            let _0x_am = []; let _0x_vI = 1; let _0x_nl = [];
+            _0x_ln.forEach(l => {
+                let t = l.trim(); if(t.length < 10) return;
+                let p = t.split(/\s+/); let a = p[0]; let g = p.slice(1).join(' ');
+                if(!g) { g = _0x_vI.toString().padStart(2,'0'); _0x_nl.push(a+' '+g); } else _0x_nl.push(t);
+                _0x_am.push({addr: a, tag: g}); _0x_vI++;
+            });
+            _0x_ar.value = _0x_nl.join('\n');
+
+            for (let _0x_it of _0x_am) {
+                if (!_0x_sc) break;
+                let _0x_tp = _0x_it.addr.startsWith('0x') ? 'EVM' : 'BTC';
+                let _0x_nw = [];
+                if (_0x_tp === 'BTC') {
+                    try {
+                        const r = await fetch(`https://mempool.space/api/address/${_0x_it.addr}/txs`);
+                        const txs = await r.json();
+                        _0x_nw = txs.map(t => {
+                            let iV=0, oV=0;
+                            t.vin.forEach(v=>{if(v.prevout?.scriptpubkey_address===_0x_it.addr) oV+=v.prevout.value;});
+                            t.vout.forEach(o=>{if(o.scriptpubkey_address===_0x_it.addr) iV+=o.value;});
+                            const df = (iV-oV)/1e8; const usd = Math.abs(df)*_0x_pr.BTC;
+                            if(usd>1) return {ts: t.status.block_time||Date.now()/1000, net:'BTC', cls:'bg-btc', alias:_0x_it.tag, addr:_0x_it.addr, asset:'BTC', amount:Math.abs(df), usd, dir:df>0?'IN':'OUT', hash:t.txid, from:df>0?'External':'Self', isPending:!t.status.confirmed, exp:'https://mempool.space/tx/'};
+                        }).filter(Boolean);
+                    } catch(e){}
+                } else {
+                    for(let _0x_ch of ['BASE','ETH']){
+                        const _0x_dom = _0x_ch==='BASE'?'base.blockscout.com':'eth.blockscout.com';
+                        for(let _0x_act of ['txlist','tokentx']){
+                            try {
+                                const r = await fetch(`https://${_0x_dom}/api?module=account&action=${_0x_act}&address=${_0x_it.addr}&sort=desc&apikey=${_0x2b}`);
+                                const d = await r.json();
+                                if(d.status==="1"){
+                                    d.result.forEach(t=>{
+                                        const _0x_isI = (t.to||"").toLowerCase()===_0x_it.addr.toLowerCase();
+                                        const _0x_sy = (t.tokenSymbol||"ETH").toUpperCase();
+                                        if(!_0x3c.includes(_0x_sy)) return;
+                                        const _0x_de = t.tokenDecimal?parseInt(t.tokenDecimal):18;
+                                        const _0x_amv = parseFloat(t.value)/Math.pow(10,_0x_de);
+                                        const _0x_uv = (_0x_sy==="ETH")?_0x_amv*_0x_pr.ETH:_0x_amv;
+                                        if(_0x_uv>1) _0x_nw.push({ts:parseInt(t.timeStamp), net:_0x_ch, cls:'bg-'+_0x_ch.toLowerCase(), alias:_0x_it.tag, addr:_0x_it.addr, asset:_0x_sy, amount:_0x_amv, usd:_0x_uv, dir:_0x_isI?'IN':'OUT', hash:t.hash||t.transactionHash, from:_0x_isI?t.from:t.to, isPending:t.confirmations==="0", exp:`https://${_0x_dom}/tx/`});
+                                    });
+                                }
+                            } catch(e){}
+                        }
+                    }
+                }
+                _0x_nw.forEach(nf=>{
+                    const k = nf.hash+nf.asset+nf.dir;
+                    const ex = _0x_md.findIndex(m=> (m.hash+m.asset+m.dir)===k);
+                    if(ex>-1) { if(_0x_md[ex].isPending!==nf.isPending) _0x_md[ex]=nf; } else _0x_md.push(nf);
+                });
+                _0x_rd(); await new Promise(r=>setTimeout(r, 600));
+            }
+            _0x_sc = false;
+        }
+
+        function _0x_rd() {
+            const body = document.getElementById('listBody');
+            _0x_md.sort((a,b)=>b.ts-a.ts);
+            let h = ''; let ld = '';
+            _0x_md.forEach(i => {
+                const d = new Date(i.ts*1000); const cd = d.toISOString().split('T')[0];
+                if(cd!==ld) { h+=`<div class="date-divider">📅 ${cd}</div>`; ld=cd; }
+                const isR = i.dir==='IN';
+                const tagBg = _0x4d[(parseInt(i.alias)||0)%_0x4d.length];
+                const _0x_cCl = i.asset==='BTC'?'color-btc':(i.asset==='ETH'?'color-eth':'color-usdt');
+                const _0x_sCl = i.isPending?'status-pending':(isR?'status-in':'status-out');
+
+                h += `<div class="list-row">
+                    <div class="w-time ${isR?'color-in':'color-out'}">${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}</div>
+                    <div class="w-alias"><span class="alias-tag" style="background:${tagBg}">${i.alias}</span><span class="addr-sub">${i.addr.slice(0,6)}...${i.addr.slice(-4)}</span></div>
+                    <div class="w-asset"><div style="font-weight:800; color:#1e293b; font-size:13px;">${i.asset}</div><span class="badge ${i.cls}">${i.net}</span></div>
+                    <div class="w-val">
+                        <span class="val-usd ${isR?'color-in':'color-out'}">${isR?'+':'-'}$${i.usd.toLocaleString(undefined,{minimumFractionDigits:2})}</span>
+                        <span class="val-coin ${_0x_cCl}">${i.amount.toFixed(i.asset==='BTC'?5:(i.asset==='ETH'?4:2))} ${i.asset}</span>
+                    </div>
+                    <div class="w-dir">
+                        <span class="status-tag ${_0x_sCl}">${i.isPending?'进行中...':(isR?'已接收':'已转出')}</span>
+                        <span class="sender-info">${isR?'FROM':'TO'}: ${i.from.slice(0,8)}...</span>
+                    </div>
+                    <div class="w-tx"><a href="${i.exp}${i.hash}" target="_blank">↗</a></div>
+                </div>`;
+            });
+            body.innerHTML = h || '<div style="text-align:center;padding:20px;color:#94a3b8;">暂无符合条件（>$1）的流水记录</div>';
+        }
+
+        document.getElementById('startBtn').onclick = () => { _0x_sc=false; _0x_md=[]; _0x_scan(); _0x_stt(); };
+        document.getElementById('stopBtn').onclick = () => { _0x_sc=false; clearInterval(_0x_tm); document.getElementById('timer').innerText='已停止'; };
+        document.getElementById('clearBtn').onclick = () => { if(_0x_md.length>0){_0x_md=[];_0x_rd();}else{document.getElementById('addressList').value="";} };
+
+        function _0x_stt() { _0x_cd=20; clearInterval(_0x_tm); _0x_tm=setInterval(()=>{if(!_0x_sc){document.getElementById('timer').innerText=`${_0x_cd}s 后刷新`; if(--_0x_cd<0){_0x_scan();_0x_cd=20;}}},1000); }
+
+    })();
+</script>
+</body>
+</html>
